@@ -49,11 +49,18 @@ def run_until_done(
     lease_seconds: int = 30,
     chaos: _Chaos | None = None,
     poll_idle: float = 0.0,
+    max_steps: int | None = None,
 ) -> int:
-    """Drive a run to completion from this worker. Returns the number of steps it finished."""
+    """Drive a run to completion from this worker. Returns the number of steps it finished.
+
+    `max_steps` stops the worker early after that many steps, which lets a caller interleave a
+    fault - killing a database node, say - between steps to show the run survive it.
+    """
     ledger = Ledger(conn, tenant_id=tenant_id)
     finished = 0
     while True:
+        if max_steps is not None and finished >= max_steps:
+            return finished
         claim = ledger.claim_next(run_id, worker=worker, lease_seconds=lease_seconds)
         if claim is None:
             if poll_idle and _has_outstanding_work(conn, tenant_id, run_id):
