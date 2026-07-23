@@ -21,6 +21,7 @@ from psycopg.types.json import Jsonb
 
 class Effector(Protocol):
     name: str
+    destructive: bool  # requires an operator approval before the agent may run it
 
     def apply(
         self, conn: psycopg.Connection, tenant_id: UUID, idem_key: str, worker: str,
@@ -46,6 +47,7 @@ class EcsUpdateServiceEffector:
     """Sets a service's desired count. Idempotent under the step key."""
 
     name = "ecs.update_service"
+    destructive = False
 
     def apply(self, conn, tenant_id, idem_key, worker, params):
         with conn.transaction():
@@ -79,6 +81,37 @@ class EcsUpdateServiceEffector:
             return observed
 
 
+class EcsRollbackDeploymentEffector:
+    """Rolls a service back to a prior task-definition revision. Destructive: needs approval."""
+
+    name = "ecs.rollback_deployment"
+    destructive = True
+
+    def apply(self, conn, tenant_id, idem_key, worker, params):
+        with conn.transaction():
+            existing = conn.execute(
+                "SELECT observed_state FROM effect_log WHERE tenant_id = %s AND idem_key = %s",
+                (tenant_id, idem_key),
+            ).fetchone()
+            if existing is not None:
+                return existing[0]
+            row = conn.execute(
+                """
+                UPDATE service_state SET task_def_rev = %s
+                 WHERE tenant_id = %s AND service = %s
+                RETURNING desired_count, task_def_rev
+                """,
+                (params["task_definition"], tenant_id, params["service"]),
+            ).fetchone()
+            observed = {"service": params["service"], "desired_count": row[0], "task_def_rev": row[1]}
+            conn.execute(
+                "INSERT INTO effect_log (tenant_id, idem_key, applied_by, observed_state) "
+                "VALUES (%s, %s, %s, %s)",
+                (tenant_id, idem_key, worker, Jsonb(observed)),
+            )
+            return observed
+
+
 def demo_registry() -> dict[str, Effector]:
-    effectors = [EcsUpdateServiceEffector()]
+    effectors = [EcsUpdateServiceEffector(), EcsRollbackDeploymentEffector()]
     return {e.name: e for e in effectors}
