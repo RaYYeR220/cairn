@@ -12,9 +12,8 @@ one to retry, and whichever serial order it picks leaves a consistent end state:
   * revoke, then decide  -> the planner reads the quarantined tier and refuses.
   * decide, then revoke  -> the decision commits, and the revocation taints it on the way past.
 
-Either way, `revoke` wins the tier and no untainted decision is left citing it. This is the
-property the brief calls impossible where the vector index and the operational tables are not in
-the same transaction.
+Either way, `revoke` wins the tier and no untainted decision is left citing it. This property is
+unattainable where the vector index and the operational tables are not in the same transaction.
 """
 
 from cairn.memory import Tier

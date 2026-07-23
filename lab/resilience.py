@@ -6,8 +6,8 @@ node in us-east-1. Midway through, we kill that node - the region the agent's me
 goes dark. The worker reconnects to a surviving region, reads its ledger, which is intact, and
 finishes the run. Every side effect still lands exactly once.
 
-This is the claim the brief makes concrete: an agent whose memory is a single-node store stops
-when that node dies; an agent whose memory is a distributed serializable ledger does not.
+This makes the core claim concrete: an agent whose memory is a single-node store stops when that
+node dies; an agent whose memory is a distributed serializable ledger does not.
 
 Run it against the lab cluster (see lab/docker-compose.yml):
 
