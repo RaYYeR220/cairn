@@ -13,7 +13,17 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-timeout>=2.3",
+    "pyyaml>=6.0",
 ]
+mcp = [
+    "mcp>=1.2",
+]
+aws = [
+    "boto3>=1.35",
+]
+
+[project.scripts]
+cairn-mcp = "cairn.mcp_server:main"
 
 [build-system]
 requires = ["hatchling"]
