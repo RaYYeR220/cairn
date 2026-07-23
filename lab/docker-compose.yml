@@ -1,0 +1,90 @@
+# Three-node CockroachDB cluster, one node per simulated region.
+# Replication factor 3 across three regions means the cluster keeps quorum when
+# an entire region goes dark - which is the point of the resilience lab.
+name: cairn-lab
+
+x-node: &node
+  image: cockroachdb/cockroach:v25.4.13
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "curl", "-sf", "http://localhost:8080/health?ready=1"]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+    start_period: 20s
+
+services:
+  crdb-east:
+    <<: *node
+    container_name: cairn-crdb-east
+    hostname: crdb-east
+    command: >
+      start --insecure
+      --join=crdb-east:26357,crdb-west:26357,crdb-eu:26357
+      --listen-addr=crdb-east:26357
+      --advertise-addr=crdb-east:26357
+      --sql-addr=crdb-east:26257
+      --advertise-sql-addr=crdb-east:26257
+      --http-addr=crdb-east:8080
+      --locality=region=us-east-1,zone=a
+      --cache=.2 --max-sql-memory=.2
+    ports:
+      - "26257:26257"
+      - "8080:8080"
+    volumes:
+      - crdb-east-data:/cockroach/cockroach-data
+
+  crdb-west:
+    <<: *node
+    container_name: cairn-crdb-west
+    hostname: crdb-west
+    command: >
+      start --insecure
+      --join=crdb-east:26357,crdb-west:26357,crdb-eu:26357
+      --listen-addr=crdb-west:26357
+      --advertise-addr=crdb-west:26357
+      --sql-addr=crdb-west:26257
+      --advertise-sql-addr=crdb-west:26257
+      --http-addr=crdb-west:8080
+      --locality=region=us-west-2,zone=a
+      --cache=.2 --max-sql-memory=.2
+    ports:
+      - "26258:26257"
+      - "8081:8080"
+    volumes:
+      - crdb-west-data:/cockroach/cockroach-data
+
+  crdb-eu:
+    <<: *node
+    container_name: cairn-crdb-eu
+    hostname: crdb-eu
+    command: >
+      start --insecure
+      --join=crdb-east:26357,crdb-west:26357,crdb-eu:26357
+      --listen-addr=crdb-eu:26357
+      --advertise-addr=crdb-eu:26357
+      --sql-addr=crdb-eu:26257
+      --advertise-sql-addr=crdb-eu:26257
+      --http-addr=crdb-eu:8080
+      --locality=region=eu-west-1,zone=a
+      --cache=.2 --max-sql-memory=.2
+    ports:
+      - "26259:26257"
+      - "8082:8080"
+    volumes:
+      - crdb-eu-data:/cockroach/cockroach-data
+
+  init:
+    image: cockroachdb/cockroach:v25.4.13
+    container_name: cairn-crdb-init
+    command: init --insecure --host=crdb-east:26357
+    depends_on:
+      - crdb-east
+      - crdb-west
+      - crdb-eu
+    restart: on-failure
+
+volumes:
+  crdb-east-data:
+  crdb-west-data:
+  crdb-eu-data:

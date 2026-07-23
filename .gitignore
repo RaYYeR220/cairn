@@ -1,0 +1,54 @@
+# --- local env / secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials
+.aws/
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.coverage
+htmlcov/
+
+# --- node / web ---
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# --- infra state ---
+.terraform/
+*.tfstate
+*.tfstate.*
+cdk.out/
+.serverless/
+
+# --- data / artifacts ---
+cockroach-data/
+*.log
+*.db
+tmp/
+scratch/
+
+# --- design exploration (not part of the product) ---
+ui-prototypes/
+mockups/
+design-ref/
+variants/
+
+# --- editor ---
+.DS_Store
+.idea/
+.vscode/
