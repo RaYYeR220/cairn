@@ -4,7 +4,10 @@ import uuid
 import psycopg
 import pytest
 
+from cairn.embedding import DeterministicEmbedder
+from cairn.gate import IntegrityGate
 from cairn.ledger import Ledger
+from cairn.memory import MemoryStore
 from cairn.schema import apply_schema
 
 ADMIN_URL = os.environ.get(
@@ -23,9 +26,8 @@ def test_database() -> str:
     with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
         conn.execute(f"CREATE DATABASE {name}")
     try:
-        with psycopg.connect(_database_url(name)) as conn:
+        with psycopg.connect(_database_url(name), autocommit=True) as conn:
             apply_schema(conn)
-            conn.commit()
         yield _database_url(name)
     finally:
         with psycopg.connect(ADMIN_URL, autocommit=True) as conn:
@@ -61,3 +63,36 @@ def ledger(connect, tenant) -> Ledger:
 def other_worker(connect, tenant) -> Ledger:
     """A second worker on its own connection, sharing the tenant."""
     return Ledger(connect(), tenant_id=tenant)
+
+
+@pytest.fixture
+def embedder() -> DeterministicEmbedder:
+    return DeterministicEmbedder(dimensions=1024)
+
+
+@pytest.fixture
+def store(connect, tenant, embedder) -> MemoryStore:
+    return MemoryStore(connect(), tenant_id=tenant, embedder=embedder, gate=IntegrityGate())
+
+
+@pytest.fixture
+def store_with_broken_classifier(connect, tenant, embedder) -> MemoryStore:
+    def explode(_content: str) -> float:
+        raise RuntimeError("bedrock timed out")
+
+    return MemoryStore(
+        connect(),
+        tenant_id=tenant,
+        embedder=embedder,
+        gate=IntegrityGate(classifier=explode),
+    )
+
+
+@pytest.fixture
+def store_with_generous_classifier(connect, tenant, embedder) -> MemoryStore:
+    return MemoryStore(
+        connect(),
+        tenant_id=tenant,
+        embedder=embedder,
+        gate=IntegrityGate(classifier=lambda _content: 0.0),
+    )

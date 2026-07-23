@@ -8,7 +8,32 @@ from __future__ import annotations
 
 import psycopg
 
+from .trust import EMBEDDING_DIMENSIONS
+
 STATEMENTS: list[str] = [
+    f"""
+    CREATE TABLE IF NOT EXISTS memory (
+        tenant_id    UUID        NOT NULL,
+        mem_id       UUID        NOT NULL DEFAULT gen_random_uuid(),
+        trust_tier   INT2        NOT NULL,
+        kind         STRING      NOT NULL,
+        content      STRING      NOT NULL,
+        content_hash STRING      NOT NULL,
+        source_uri   STRING      NOT NULL,
+        source_class STRING      NOT NULL,
+        ingested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        gate_verdict JSONB       NOT NULL,
+        embedding    VECTOR({EMBEDDING_DIMENSIONS}),
+        PRIMARY KEY (tenant_id, mem_id)
+    )
+    """,
+    # trust_tier sits between tenant_id and the embedding on purpose: as a prefix column it
+    # scopes the approximate-nearest-neighbour traversal to the tiers a query names, so
+    # quarantined memory is not filtered out of a result set - it is never visited.
+    """
+    CREATE VECTOR INDEX IF NOT EXISTS mem_vec
+        ON memory (tenant_id, trust_tier, embedding vector_cosine_ops)
+    """,
     """
     CREATE TABLE IF NOT EXISTS agent_run (
         tenant_id  UUID        NOT NULL,
@@ -51,7 +76,30 @@ STATEMENTS: list[str] = [
 ]
 
 
+def enable_vector_indexes(conn: psycopg.Connection) -> bool:
+    """Turn on vector indexing if this cluster lets us.
+
+    Self-hosted clusters need the setting flipped once; managed clusters may reserve it, in
+    which case it is already on or the operator has to enable it. Either way the caller only
+    needs to know whether to expect an accelerated index.
+    """
+    if not conn.autocommit:
+        # SET CLUSTER SETTING cannot run inside a multi-statement transaction, and attempting
+        # it would poison the caller's transaction rather than fail on its own.
+        return False
+    try:
+        conn.execute("SET CLUSTER SETTING feature.vector_index.enabled = true")
+        return True
+    except psycopg.Error:
+        return False
+
+
 def apply_schema(conn: psycopg.Connection) -> None:
-    """Create every Cairn table that does not already exist."""
+    """Create every Cairn table and index that does not already exist.
+
+    Pass an autocommit connection: enabling vector indexing is a cluster setting, which cannot
+    be issued inside a transaction.
+    """
+    enable_vector_indexes(conn)
     for statement in STATEMENTS:
         conn.execute(statement)
