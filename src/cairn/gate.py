@@ -18,10 +18,35 @@ Three rules, in order of authority:
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Callable
 
 from .trust import SOURCE_CEILING, Tier
+
+# Common confusables an attacker uses to slip a trigger word past a literal match: Cyrillic and
+# Greek letters that render identically to Latin ones. Folded to Latin before detection.
+_HOMOGLYPHS = str.maketrans(
+    {
+        "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "ѕ": "s",
+        "і": "i", "ј": "j", "ԁ": "d", "ո": "n", "г": "r", "т": "t", "к": "k", "м": "m",
+        "Α": "A", "Β": "B", "Ε": "E", "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N",
+        "Ο": "O", "Ρ": "P", "Τ": "T", "Χ": "X", "ο": "o", "α": "a", "ε": "e", "ρ": "p",
+    }
+)
+
+_SPACED_LETTERS = re.compile(r"(?<=\b\w) (?=\w\b)")
+
+
+def normalize(content: str) -> str:
+    """Fold obfuscations that only change how a trigger word is spelled, not what it says.
+
+    Runs before the detectors so that a homoglyph-swapped or letter-spaced payload is matched by
+    the same patterns as its plain form. Kept deliberately conservative - it never changes the
+    meaning of legitimate telemetry, only undoes character-level evasion.
+    """
+    folded = unicodedata.normalize("NFKC", content).translate(_HOMOGLYPHS)
+    return _SPACED_LETTERS.sub("", folded)
 
 #: Score at or above which the classifier's opinion alone quarantines content.
 CLASSIFIER_THRESHOLD = 0.5
@@ -112,7 +137,15 @@ class IntegrityGate:
 
     def screen(self, content: str, source_class: str, requested_tier: Tier) -> Verdict:
         ceiling = SOURCE_CEILING.get(source_class, Tier.QUARANTINED)
-        fired = [name for name, pattern in DETECTORS if pattern.search(content)]
+        # Match each detector against the raw text and its normalized form: the raw text keeps
+        # tag-block and zero-width smuggling visible, while the normalized form defeats homoglyph
+        # and letter-spacing evasion.
+        normalized = normalize(content)
+        fired = [
+            name
+            for name, pattern in DETECTORS
+            if pattern.search(content) or pattern.search(normalized)
+        ]
 
         score: float | None = None
         classifier_failed = False
