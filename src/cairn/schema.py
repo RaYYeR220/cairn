@@ -23,6 +23,8 @@ STATEMENTS: list[str] = [
         source_class STRING      NOT NULL,
         ingested_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
         gate_verdict JSONB       NOT NULL,
+        revoked_at   TIMESTAMPTZ,
+        revoked_reason STRING,
         embedding    VECTOR({EMBEDDING_DIMENSIONS}),
         PRIMARY KEY (tenant_id, mem_id)
     )
@@ -58,8 +60,32 @@ STATEMENTS: list[str] = [
         lease_expires_at TIMESTAMPTZ,
         lease_epoch      INT         NOT NULL DEFAULT 0,
         attempts         INT         NOT NULL DEFAULT 0,
+        decision_id      UUID,
         PRIMARY KEY (tenant_id, idem_key),
-        INDEX by_run (tenant_id, run_id, step_no)
+        INDEX by_run (tenant_id, run_id, step_no),
+        INDEX by_decision (tenant_id, decision_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS decision (
+        tenant_id    UUID        NOT NULL,
+        decision_id  UUID        NOT NULL DEFAULT gen_random_uuid(),
+        run_id       UUID,
+        summary      STRING      NOT NULL,
+        tainted      BOOL        NOT NULL DEFAULT false,
+        taint_reason STRING,
+        decided_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (tenant_id, decision_id),
+        INDEX by_run (tenant_id, run_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS decision_evidence (
+        tenant_id   UUID NOT NULL,
+        decision_id UUID NOT NULL,
+        mem_id      UUID NOT NULL,
+        PRIMARY KEY (tenant_id, decision_id, mem_id),
+        INDEX by_mem (tenant_id, mem_id)
     )
     """,
     """

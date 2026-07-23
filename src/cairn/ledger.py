@@ -66,16 +66,22 @@ class Ledger:
         return row[0]
 
     def record_intent(
-        self, run_id: UUID, step_no: int, effector: str, params: dict[str, Any]
+        self,
+        run_id: UUID,
+        step_no: int,
+        effector: str,
+        params: dict[str, Any],
+        decision_id: UUID | None = None,
     ) -> Intent:
         key = idempotency_key(run_id, step_no, effector, params)
         self._conn.execute(
             """
-            INSERT INTO step_intent (tenant_id, idem_key, run_id, step_no, effector, params)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO step_intent
+                (tenant_id, idem_key, run_id, step_no, effector, params, decision_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (tenant_id, idem_key) DO NOTHING
             """,
-            (self._tenant_id, key, run_id, step_no, effector, Jsonb(params)),
+            (self._tenant_id, key, run_id, step_no, effector, Jsonb(params), decision_id),
         )
         return Intent(
             idem_key=key, run_id=run_id, step_no=step_no, effector=effector, params=params
