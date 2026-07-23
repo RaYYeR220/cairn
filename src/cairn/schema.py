@@ -88,6 +88,28 @@ STATEMENTS: list[str] = [
         INDEX by_mem (tenant_id, mem_id)
     )
     """,
+    # The demo workload's "external world": a service whose desired count the agent changes, and
+    # an append-only log of applied effects keyed by the step's idempotency key. The effector
+    # keys its writes here so a replayed step is a no-op - this is where exactly-once is observed.
+    """
+    CREATE TABLE IF NOT EXISTS service_state (
+        tenant_id     UUID   NOT NULL,
+        service       STRING NOT NULL,
+        desired_count INT    NOT NULL,
+        task_def_rev  INT    NOT NULL DEFAULT 1,
+        PRIMARY KEY (tenant_id, service)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS effect_log (
+        tenant_id      UUID        NOT NULL,
+        idem_key       STRING      NOT NULL,
+        applied_by     STRING      NOT NULL,
+        observed_state JSONB       NOT NULL,
+        applied_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (tenant_id, idem_key)
+    )
+    """,
     """
     CREATE TABLE IF NOT EXISTS step_result (
         tenant_id      UUID        NOT NULL,
