@@ -12,6 +12,10 @@ along, and every fact it learns carries a record of where it came from.
 
 Built for the **CockroachDB × AWS "Build with Agentic Memory"** hackathon.
 
+**▶ Live demo: [cairn-console.onrender.com](https://cairn-console.onrender.com)** — press *Run
+incident* and watch the enforcement. *(Free tier; the first request after idle takes ~30s to wake.)*
+&nbsp;·&nbsp; **[Reviewer's 5-minute path →](JUDGES.md)**
+
 ---
 
 ## The problem

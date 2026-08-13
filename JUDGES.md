@@ -20,7 +20,8 @@ Open **http://localhost:8080** and press **Run incident**. You will watch, top t
    a compensating action — the rollback is a query over provenance.
 5. **The graded scorecard**, misses included.
 
-The hosted version is the same page, one click away: **<DEMO_URL>** *(set after deploy)*.
+The hosted version is the same page, one click away: **https://cairn-console.onrender.com**
+*(free tier — the first request after idle may take ~30s to wake)*.
 
 ## 3 minutes — run the proofs
 
