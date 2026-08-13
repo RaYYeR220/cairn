@@ -1,0 +1,23 @@
+# Fly.io deployment for the Cairn console. The app name is set by `fly launch`.
+# The database URL is provided as a secret: `fly secrets set CAIRN_DATABASE_URL=...`.
+
+primary_region = "iad"  # us-east, next to the CockroachDB Cloud cluster
+
+[build]
+
+[env]
+  PORT = "8080"
+  CAIRN_EMBEDDER = "deterministic"
+  CAIRN_EMBEDDING_DIM = "384"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

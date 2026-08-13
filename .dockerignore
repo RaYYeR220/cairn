@@ -1,0 +1,15 @@
+.venv/
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+tests/
+lab/
+docs/
+.env
+.env.*
+!.env.example
+cockroach-data/
+*.log
