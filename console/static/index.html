@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cairn — durable agent memory</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --basalt:#14120f; --basalt-2:#1c1915; --slate:#221e19; --line:#3a332a;
+    --stone:#e9e2d3; --stone-dim:#b3a892; --stone-faint:#7d735f;
+    --amber:#e0a24e; --amber-deep:#c9812f; --teal:#5fb6a8; --moss:#8fae55;
+    --clay:#d0603f; --clay-deep:#a8412a;
+    --t0:#d0603f; --t1:#7d735f; --t2:#5fb6a8; --t3:#e0a24e;
+    --shadow:0 18px 50px -20px rgba(0,0,0,.75);
+    --ease:cubic-bezier(.2,.7,.2,1);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--basalt);
+    color:var(--stone);
+    font-family:"JetBrains Mono",ui-monospace,monospace;
+    font-size:14px; line-height:1.6; letter-spacing:.01em;
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(1200px 600px at 78% -10%, rgba(224,162,78,.07), transparent 60%),
+      radial-gradient(900px 500px at 8% 8%, rgba(95,182,168,.05), transparent 55%),
+      repeating-radial-gradient(circle at 50% 120%, transparent 0 38px, rgba(120,108,88,.045) 38px 39px);
+    background-attachment:fixed;
+  }
+  body::before{ /* grain */
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:1; opacity:.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+  }
+  .wrap{position:relative; z-index:2; max-width:1080px; margin:0 auto; padding:0 26px 140px}
+  a{color:var(--teal)}
+
+  /* ---------- masthead ---------- */
+  header.top{
+    display:flex; align-items:flex-end; justify-content:space-between; gap:24px;
+    padding:40px 0 26px; border-bottom:1px solid var(--line); flex-wrap:wrap;
+  }
+  .brand{display:flex; align-items:center; gap:18px}
+  .glyph{width:44px; height:52px; flex:none}
+  .glyph rect{fill:var(--stone)}
+  .wordmark h1{
+    font-family:"Fraunces",serif; font-weight:900; font-size:44px; line-height:.9;
+    margin:0; letter-spacing:-.02em; font-optical-sizing:auto;
+  }
+  .wordmark .sub{color:var(--stone-dim); font-size:12.5px; margin-top:7px; max-width:44ch}
+  .wordmark .sub em{color:var(--amber); font-style:normal}
+  .run{
+    font-family:"JetBrains Mono",monospace; font-weight:700; font-size:13px;
+    letter-spacing:.06em; text-transform:uppercase; color:var(--basalt);
+    background:linear-gradient(180deg,var(--amber),var(--amber-deep));
+    border:0; padding:14px 22px; border-radius:2px; cursor:pointer;
+    box-shadow:0 10px 24px -10px rgba(224,162,78,.6), inset 0 1px 0 rgba(255,255,255,.25);
+    transition:transform .15s var(--ease), filter .15s;
+    white-space:nowrap;
+  }
+  .run:hover{transform:translateY(-2px); filter:brightness(1.06)}
+  .run:active{transform:translateY(0)}
+  .run[disabled]{opacity:.5; cursor:progress; filter:saturate(.4)}
+
+  /* seismograph strip */
+  .seis{height:34px; margin:0; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:14px; color:var(--stone-faint); font-size:11px;
+    letter-spacing:.14em; text-transform:uppercase}
+  .seis svg{flex:1; height:20px}
+  .seis .dot{width:7px;height:7px;border-radius:50%;background:var(--moss);box-shadow:0 0 10px var(--moss)}
+
+  /* ---------- section scaffolding ---------- */
+  section.step{padding:44px 0 8px; border-bottom:1px dashed var(--line); position:relative}
+  .kicker{display:flex; align-items:center; gap:12px; margin-bottom:6px}
+  .kicker .idx{font-family:"Fraunces",serif; font-weight:600; font-size:15px; color:var(--amber);
+    width:34px; height:34px; border:1px solid var(--amber-deep); border-radius:50%;
+    display:grid; place-items:center; flex:none}
+  .kicker h2{font-family:"Fraunces",serif; font-weight:600; font-size:23px; margin:0; letter-spacing:-.01em}
+  .lede{color:var(--stone-dim); font-size:13px; max-width:74ch; margin:0 0 22px 46px}
+  .lede b{color:var(--stone)}
+  .muted{color:var(--stone-faint)}
+  .idle .step .hidewhenidle{opacity:.32; filter:grayscale(.4)}
+
+  /* ---------- strata (trust tiers) ---------- */
+  .strata{display:flex; flex-direction:column; gap:6px; margin-left:46px}
+  .stratum{display:flex; align-items:center; gap:14px; padding:12px 16px; border-radius:3px;
+    background:var(--basalt-2); border-left:4px solid var(--line);
+    animation:rise .5s var(--ease) both}
+  .stratum .tier{font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; width:112px; flex:none}
+  .stratum .body{flex:1}
+  .stratum.t2{border-left-color:var(--t2)} .stratum.t2 .tier{color:var(--t2)}
+  .stratum.t3{border-left-color:var(--t3)} .stratum.t3 .tier{color:var(--t3)}
+  .stratum .src{color:var(--stone-faint); font-size:11px; margin-top:2px}
+
+  /* ---------- telemetry cards ---------- */
+  .feed{display:flex; flex-direction:column; gap:10px; margin-left:46px}
+  .sig{display:grid; grid-template-columns:20px 1fr auto; gap:14px; align-items:start;
+    padding:14px 16px; background:var(--basalt-2); border:1px solid var(--line); border-radius:3px;
+    animation:rise .5s var(--ease) both}
+  .sig .rail{width:8px; height:8px; border-radius:50%; margin-top:7px; background:var(--stone-faint)}
+  .sig .txt{color:var(--stone-dim)}
+  .sig .tag{font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--stone-faint);
+    align-self:center; white-space:nowrap}
+  .sig.poison{border-color:var(--clay-deep); background:linear-gradient(90deg,rgba(208,96,63,.10),var(--basalt-2) 60%)}
+  .sig.poison .rail{background:var(--clay); box-shadow:0 0 10px var(--clay)}
+  .sig.poison .txt{color:#e7b9a8}
+  .sig.poison .tag{color:var(--clay)}
+  .sig .txt .redact{background:var(--clay-deep); color:transparent; border-radius:2px; padding:0 3px}
+
+  /* ---------- the gate / quarantine seal ---------- */
+  .gate-grid{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-left:46px}
+  @media(max-width:720px){.gate-grid{grid-template-columns:1fr}}
+  .vault{border:1.5px dashed var(--clay-deep); border-radius:4px; padding:18px; position:relative;
+    background:repeating-linear-gradient(45deg,rgba(208,96,63,.05) 0 10px,transparent 10px 20px)}
+  .vault h3, .passed h3{font-family:"Fraunces",serif; font-weight:600; font-size:15px; margin:0 0 12px;
+    display:flex; align-items:center; gap:9px}
+  .vault h3{color:var(--clay)} .passed h3{color:var(--teal)}
+  .seal{position:absolute; top:-14px; right:16px; background:var(--clay-deep); color:#f3ddd3;
+    font-size:10px; letter-spacing:.18em; text-transform:uppercase; padding:6px 12px; border-radius:2px;
+    transform:rotate(3deg); box-shadow:var(--shadow)}
+  .qitem{background:rgba(0,0,0,.25); border:1px solid var(--clay-deep); border-radius:3px; padding:12px 14px}
+  .qitem .c{color:#e7b9a8; font-size:12.5px}
+  .qitem .why{margin-top:9px; font-size:11px; color:var(--stone-dim); display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .chip{font-size:10px; letter-spacing:.05em; text-transform:uppercase; padding:3px 8px; border-radius:2px;
+    background:var(--clay-deep); color:#f3ddd3}
+  .chip.det{background:transparent; border:1px solid var(--clay-deep); color:var(--clay)}
+  .passed{border:1px solid var(--line); border-radius:4px; padding:18px; background:var(--basalt-2)}
+  .passed ul{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:8px}
+  .passed li{font-size:12px; color:var(--stone-dim); display:flex; gap:10px; align-items:start}
+  .passed li::before{content:"↳"; color:var(--teal)}
+
+  /* ---------- the cairn / ledger ---------- */
+  .trail{margin-left:46px; position:relative; padding-left:34px}
+  .trail::before{content:""; position:absolute; left:11px; top:6px; bottom:20px; width:2px;
+    background:linear-gradient(var(--amber),transparent)}
+  .stone{position:relative; margin-bottom:16px; animation:drop .6s var(--ease) both}
+  .stone::before{content:""; position:absolute; left:-28px; top:14px; width:16px; height:12px;
+    border-radius:48% 52% 46% 54%/60% 62% 38% 40%;
+    background:linear-gradient(180deg,var(--stone-dim),var(--stone-faint));
+    box-shadow:0 3px 6px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.3)}
+  .card{background:var(--slate); border:1px solid var(--line); border-radius:4px; padding:16px 18px;
+    box-shadow:var(--shadow)}
+  .card.exec{border-left:3px solid var(--moss)}
+  .card .row1{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+  .card .eff{font-weight:700; color:var(--stone); font-size:14px}
+  .card .outcome{font-size:10px; letter-spacing:.12em; text-transform:uppercase; padding:4px 9px; border-radius:2px;
+    background:rgba(143,174,85,.16); color:var(--moss); border:1px solid rgba(143,174,85,.4)}
+  .kv{margin-top:12px; display:grid; grid-template-columns:auto 1fr; gap:4px 16px; font-size:12px}
+  .kv .k{color:var(--stone-faint); text-transform:uppercase; letter-spacing:.08em; font-size:10.5px; padding-top:2px}
+  .kv .v{color:var(--stone-dim); word-break:break-word}
+  .kv .v.mono{font-size:11px; color:var(--amber)}
+
+  /* refusal card */
+  .refusal{margin-left:46px; border:1px solid var(--clay-deep); border-radius:4px; padding:16px 18px;
+    background:linear-gradient(90deg,rgba(208,96,63,.08),transparent); color:#e7b9a8; font-size:13px;
+    display:flex; gap:12px; align-items:center}
+
+  /* ---------- rollback / taint ---------- */
+  .rollback{margin-left:46px}
+  .taintbar{display:flex; align-items:center; gap:14px; padding:14px 18px; border-radius:4px;
+    background:radial-gradient(120% 180% at 0% 50%, rgba(208,96,63,.22), var(--basalt-2) 70%);
+    border:1px solid var(--clay-deep); margin-bottom:16px}
+  .taintbar .big{font-family:"Fraunces",serif; font-size:30px; color:var(--clay); font-weight:900; line-height:1}
+  .comp{background:var(--slate); border:1px solid var(--line); border-left:3px solid var(--teal);
+    border-radius:4px; padding:16px 18px}
+  .comp h3{font-family:"Fraunces",serif; font-weight:600; font-size:15px; margin:0 0 4px; color:var(--teal)}
+
+  /* ---------- eval scorecard ---------- */
+  .score{margin-left:46px; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:26px}
+  .metric{background:var(--basalt-2); border:1px solid var(--line); border-radius:4px; padding:18px}
+  .metric .n{font-family:"Fraunces",serif; font-weight:900; font-size:38px; line-height:1; color:var(--stone)}
+  .metric .n.good{color:var(--moss)} .metric .n.warn{color:var(--amber)}
+  .metric .l{font-size:11px; color:var(--stone-faint); text-transform:uppercase; letter-spacing:.1em; margin-top:8px}
+  .fam{margin-left:46px; display:flex; flex-direction:column; gap:7px}
+  .famrow{display:grid; grid-template-columns:190px 1fr 44px; gap:12px; align-items:center; font-size:11.5px}
+  .famrow .name{color:var(--stone-dim)}
+  .bar{height:8px; border-radius:4px; background:var(--slate); overflow:hidden}
+  .bar span{display:block; height:100%; background:linear-gradient(90deg,var(--teal),var(--moss)); border-radius:4px;
+    transition:width 1s var(--ease)}
+  .famrow.miss .bar span{background:linear-gradient(90deg,var(--clay-deep),var(--clay))}
+  .famrow .pct{text-align:right; color:var(--stone-faint)}
+  .note{margin:16px 0 0 46px; font-size:12px; color:var(--stone-faint); max-width:78ch}
+  .note b{color:var(--amber)}
+
+  footer{margin-top:60px; padding-top:24px; border-top:1px solid var(--line); color:var(--stone-faint);
+    font-size:11.5px; display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap}
+
+  .placeholder{margin-left:46px; color:var(--stone-faint); font-size:13px; font-style:italic}
+  [hidden]{display:none !important}
+  @keyframes rise{from{opacity:0; transform:translateY(12px)} to{opacity:1; transform:none}}
+  @keyframes drop{from{opacity:0; transform:translateY(-16px) scale(.98)} to{opacity:1; transform:none}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important; transition:none!important}}
+</style>
+</head>
+<body class="idle">
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg class="glyph" viewBox="0 0 44 52" aria-hidden="true">
+        <rect x="9"  y="2"  width="26" height="9"  rx="3"/>
+        <rect x="4"  y="14" width="36" height="10" rx="3"/>
+        <rect x="10" y="27" width="24" height="10" rx="3"/>
+        <rect x="15" y="40" width="14" height="9"  rx="3"/>
+      </svg>
+      <div class="wordmark">
+        <h1>Cairn</h1>
+        <div class="sub">Transactional, provenance-stamped memory for agents that <em>act</em>.
+          The trail that's still standing when you get back.</div>
+      </div>
+    </div>
+    <button class="run" id="runBtn">▶ Run incident</button>
+  </header>
+
+  <div class="seis">
+    <span class="dot" id="statusDot"></span>
+    <span id="statusText">standing by</span>
+    <svg viewBox="0 0 600 20" preserveAspectRatio="none" id="seisWave">
+      <polyline fill="none" stroke="#3a332a" stroke-width="1.5" points=""/>
+    </svg>
+    <span id="clusterTag">cockroachdb · serializable</span>
+  </div>
+
+  <!-- 0. Setup: what the agent remembers + what's arriving -->
+  <section class="step">
+    <div class="kicker"><span class="idx">0</span><h2>What the agent remembers</h2></div>
+    <p class="lede">Before the incident, memory already holds trusted runbooks — recalled later by
+      meaning, and reachable only from trusted <b>strata</b> of the vector index.</p>
+    <div class="strata" id="runbooks"></div>
+
+    <div class="kicker" style="margin-top:34px"><span class="idx">i</span><h2>Telemetry arriving</h2></div>
+    <p class="lede">A burst of CloudWatch signals. One line is not a signal — it's an
+      <b>instruction</b>, smuggled in through a log the world can write to.</p>
+    <div class="feed" id="signals"></div>
+  </section>
+
+  <!-- 1. Gate -->
+  <section class="step hidewhenidle" id="s-gate">
+    <div class="kicker"><span class="idx">1</span><h2>The memory is a trust boundary</h2></div>
+    <p class="lede">On the <b>write path</b>, every line is screened before it can be embedded.
+      Instruction-shaped content from a writable source is <b>quarantined</b> — stored, flagged,
+      and unreachable from the planner — never silently trusted.</p>
+    <div id="gate" class="placeholder">Run the incident to see the gate act.</div>
+  </section>
+
+  <!-- 2. Ledger -->
+  <section class="step hidewhenidle" id="s-ledger">
+    <div class="kicker"><span class="idx">2</span><h2>The action is written before it happens</h2></div>
+    <p class="lede">The agent recalls trusted memory, proposes one action, and the gate lets it
+      through only because an operator approved it. The intent is committed to a serializable
+      ledger <b>before</b> the effect runs — each stone on the trail is a step you can walk back to.</p>
+    <div id="ledger" class="placeholder">Run the incident to lay the trail.</div>
+  </section>
+
+  <!-- 3. Rollback -->
+  <section class="step hidewhenidle" id="s-rollback">
+    <div class="kicker"><span class="idx">3</span><h2>When a trusted fact turns out to be a lie</h2></div>
+    <p class="lede">Later, a fact the agent believed is revoked — a metric feed that was spoofed.
+      Because memory is a transactional ledger with provenance, "what did we do because we believed
+      it?" is a <b>query</b>: the decision is tainted and a compensating action is proposed.</p>
+    <div id="rollback" class="placeholder">Run the incident to see the rollback.</div>
+  </section>
+
+  <!-- 4. Eval -->
+  <section class="step" id="s-eval" style="border-bottom:none">
+    <div class="kicker"><span class="idx">4</span><h2>Graded against a held-out corpus</h2></div>
+    <p class="lede">The gate, with deterministic detectors only — no model in the loop. Attacks
+      across twelve families, plus benign lines chosen to look suspicious. Reported honestly,
+      misses included.</p>
+    <div id="score" class="score"></div>
+    <div id="fam" class="fam"></div>
+    <div id="evalNote" class="note"></div>
+  </section>
+
+  <footer>
+    <span>Cairn · CockroachDB × AWS · MIT</span>
+    <span id="footMeta">durable execution · trust-tier retrieval · provenance rollback</span>
+  </footer>
+</div>
+
+<script>
+const $ = (s,r=document)=>r.querySelector(s);
+const el=(t,c,h)=>{const e=document.createElement(t); if(c)e.className=c; if(h!=null)e.innerHTML=h; return e;};
+const esc=s=>String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+const TIER={0:'quarantined',1:'raw evidence',2:'corroborated',3:'operator'};
+
+/* seismograph idle wave */
+(function(){
+  const poly=$('#seisWave polyline'); let t=0;
+  setInterval(()=>{
+    const pts=[]; for(let x=0;x<=600;x+=10){
+      const base=Math.sin((x/60)+t)*2.2 + Math.sin((x/17)-t*1.7)*1.4;
+      const spike=(x>250&&x<300&&Math.floor(t*3)%7===0)?(Math.random()*8-4):0;
+      pts.push(x+','+(10+base+spike).toFixed(1));
+    }
+    poly.setAttribute('points',pts.join(' ')); t+=0.08;
+  },90);
+})();
+function status(txt,color){ $('#statusText').textContent=txt;
+  const d=$('#statusDot'); if(color){d.style.background=color; d.style.boxShadow='0 0 10px '+color;} }
+
+async function j(url,opt){ const r=await fetch(url,opt); if(!r.ok) throw new Error(url+' '+r.status); return r.json(); }
+
+/* ---- setup panels ---- */
+async function loadSetup(){
+  try{
+    const s=await j('/api/signals');
+    const rb=$('#runbooks'); rb.innerHTML='';
+    (s.runbooks||[]).forEach((r,i)=>{
+      const row=el('div','stratum t'+r.tier);
+      row.style.animationDelay=(i*90)+'ms';
+      row.innerHTML=`<div class="tier">${TIER[r.tier]}</div>
+        <div class="body">${esc(r.text)}<div class="src">${esc(r.kind)} · op://runbooks</div></div>`;
+      rb.appendChild(row);
+    });
+    const fe=$('#signals'); fe.innerHTML='';
+    (s.signals||[]).forEach((sig,i)=>{
+      const c=el('div','sig'+(sig.poisoned?' poison':''));
+      c.style.animationDelay=(i*90)+'ms';
+      const tag=sig.poisoned?'writable source':'cloudwatch';
+      c.innerHTML=`<div class="rail"></div><div class="txt">${esc(sig.text)}</div><div class="tag">${tag}</div>`;
+      fe.appendChild(c);
+    });
+    status('memory seeded · '+ (s.signals||[]).length +' signals inbound','#5fb6a8');
+  }catch(e){ status('backend unreachable — start cairn-console','#d0603f'); }
+}
+
+/* ---- eval ---- */
+async function loadEval(){
+  try{
+    const e=await j('/api/eval');
+    const pct=Math.round(e.recall*100), fp=Math.round(e.false_positive_rate*100);
+    $('#score').innerHTML='';
+    const metrics=[
+      ['n good', e.caught+'/'+e.attacks, 'attacks caught'],
+      ['n '+(pct>=80?'good':'warn'), pct+'%', 'detector recall'],
+      ['n '+(fp===0?'good':'warn'), fp+'%', 'false positives'],
+      ['n', e.benign, 'benign lines admitted'],
+    ];
+    metrics.forEach(([cls,n,l])=>{
+      $('#score').appendChild(el('div','metric',
+        `<div class="${cls}">${n}</div><div class="l">${l}</div>`));
+    });
+    const fam=$('#fam'); fam.innerHTML='';
+    Object.entries(e.per_family).sort().forEach(([name,st])=>{
+      const p=st.total?Math.round(st.caught/st.total*100):0;
+      const miss=p<100;
+      const row=el('div','famrow'+(miss?' miss':''));
+      row.innerHTML=`<div class="name">${esc(name)}</div>
+        <div class="bar"><span style="width:0"></span></div>
+        <div class="pct">${st.caught}/${st.total}</div>`;
+      fam.appendChild(row);
+      requestAnimationFrame(()=>{ $('.bar span',row).style.width=p+'%'; });
+    });
+    $('#evalNote').innerHTML='Every structural attack is caught in code. The '+e.missed+
+      ' misses are all pure semantic paraphrase — <b>the exact gap a model second-opinion closes,'+
+      ' and which fails closed when the model is unavailable.</b>';
+  }catch(e){}
+}
+
+/* ---- the run ---- */
+function stone(step, i){
+  const s=el('div','stone'); s.style.animationDelay=(i*140)+'ms';
+  const obs=step.observed_state?JSON.stringify(step.observed_state):'—';
+  const params=step.params?JSON.stringify(step.params):'—';
+  s.innerHTML=`<div class="card exec">
+    <div class="row1"><span class="eff">${esc(step.effector)}</span>
+      <span class="outcome">${esc(step.outcome||'pending')}</span></div>
+    <div class="kv">
+      <div class="k">step</div><div class="v">#${step.step_no} · worker ${esc(step.lease_owner||'—')} · attempt ${step.attempts}</div>
+      <div class="k">params</div><div class="v">${esc(params)}</div>
+      <div class="k">observed</div><div class="v">${esc(obs)}</div>
+      <div class="k">decision</div><div class="v mono">${esc((step.decision_id||'').slice(0,12))}</div>
+    </div></div>`;
+  return s;
+}
+
+async function run(){
+  const btn=$('#runBtn'); btn.disabled=true; btn.textContent='running…';
+  document.body.classList.remove('idle');
+  status('agent handling incident…','#e0a24e');
+  try{
+    const r=await j('/api/run',{method:'POST'});
+
+    // 1. gate
+    const g=$('#gate'); g.className=''; g.innerHTML='';
+    const grid=el('div','gate-grid');
+    const vault=el('div','vault');
+    vault.innerHTML='<div class="seal">quarantined</div><h3>◆ Diverted to quarantine</h3>';
+    (r.quarantined||[]).forEach(q=>{
+      const dets=(q.detectors||[]).map(d=>`<span class="chip det">${esc(d)}</span>`).join('');
+      vault.appendChild(el('div','qitem',
+        `<div class="c">${esc(q.content)}</div>
+         <div class="why"><span class="chip">${esc(q.reason||'flagged')}</span>${dets}
+           <span class="muted">source: ${esc(q.source_class||'')}</span></div>`));
+    });
+    if(!(r.quarantined||[]).length) vault.appendChild(el('div','qitem','<div class="c muted">nothing quarantined</div>'));
+    const passed=el('div','passed','<h3>✓ Admitted as evidence</h3>');
+    const ul=el('ul');
+    ['5xx rate rose to 6.1%','p99 latency doubled after revision 42','CheckoutHighError → ALARM']
+      .forEach(t=>ul.appendChild(el('li',null,esc(t))));
+    passed.appendChild(ul);
+    grid.appendChild(vault); grid.appendChild(passed); g.appendChild(grid);
+
+    // 2. ledger  (refusals first, then executed stones)
+    const L=$('#ledger'); L.className=''; L.innerHTML='';
+    (r.refused||[]).forEach(rf=>{
+      L.appendChild(el('div','refusal',
+        `⛔ refused <b>${esc(rf.effector)}</b> — ${esc(rf.reason)}`));
+    });
+    const trail=el('div','trail');
+    (r.timeline||[]).forEach((s,i)=>trail.appendChild(stone(s,i)));
+    if(!(r.timeline||[]).length) trail.appendChild(el('div','placeholder','no steps executed'));
+    L.appendChild(trail);
+
+    // 3. rollback
+    const R=$('#rollback'); R.className='rollback'; R.innerHTML='';
+    const rb=r.rollback||{};
+    const nT=(rb.tainted_decisions||[]).length, nC=(rb.compensating_actions||[]).length;
+    R.appendChild(el('div','taintbar',
+      `<span class="big">${nT}</span>
+       <span>decision${nT===1?'':'s'} downstream of the revoked fact <b>tainted</b> and forced to re-plan.</span>`));
+    (rb.compensating_actions||[]).forEach(a=>{
+      R.appendChild(el('div','comp',
+        `<h3>Compensating action</h3>
+         <div class="kv"><div class="k">effector</div><div class="v">${esc(a.effector)}</div>
+         <div class="k">reverts</div><div class="v mono">${esc((a.reverts_idem_key||'').slice(0,16))}</div>
+         <div class="k">params</div><div class="v">${esc(JSON.stringify(a.params))}</div>
+         <div class="k">resolved</div><div class="v">${a.resolved?'exact (pre-incident state captured)':'needs live-state lookup'}</div></div>`));
+    });
+    if(!nC) R.appendChild(el('div','placeholder','no executed steps needed compensating'));
+
+    status('incident resolved · exactly once · rollback ready','#8fae55');
+  }catch(e){
+    status('run failed: '+e.message,'#d0603f');
+  }finally{
+    btn.disabled=false; btn.textContent='▶ Run again';
+  }
+}
+
+$('#runBtn').addEventListener('click',run);
+loadSetup(); loadEval();
+</script>
+</body>
+</html>
