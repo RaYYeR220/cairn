@@ -25,9 +25,14 @@ aws = [
 embed = [
     "fastembed>=0.3",
 ]
+console = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
 
 [project.scripts]
 cairn-mcp = "cairn.mcp_server:main"
+cairn-console = "cairn.console_api:main"
 
 [build-system]
 requires = ["hatchling"]
