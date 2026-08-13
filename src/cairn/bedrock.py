@@ -25,7 +25,9 @@ def _client(service: str = "bedrock-runtime"):
     import boto3
     from botocore.config import Config
 
-    region = os.environ.get("AWS_REGION", "us-east-1")
+    # Bedrock may live in a different region from the rest of the stack (text/embeddings can be
+    # gated per-region on a new account), so it has its own region knob and falls back to AWS_REGION.
+    region = os.environ.get("CAIRN_BEDROCK_REGION") or os.environ.get("AWS_REGION", "us-east-1")
     return boto3.client(service, config=Config(region_name=region, retries={"max_attempts": 3}))
 
 

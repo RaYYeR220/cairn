@@ -7,9 +7,10 @@ x-node: &node
   image: cockroachdb/cockroach:v25.4.13
   restart: unless-stopped
   healthcheck:
-    test: ["CMD", "curl", "-sf", "http://localhost:8080/health?ready=1"]
+    # The image ships no curl, so probe readiness through the SQL shell instead.
+    test: ["CMD", "/cockroach/cockroach", "sql", "--insecure", "-e", "SELECT 1"]
     interval: 5s
-    timeout: 3s
+    timeout: 4s
     retries: 20
     start_period: 20s
 
