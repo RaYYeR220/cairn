@@ -1,0 +1,21 @@
+# Render.com blueprint for the Cairn console.
+# Deploy: New > Blueprint > connect this repo. Then set CAIRN_DATABASE_URL (the CockroachDB Cloud
+# connection string) as a secret env var in the dashboard - it is intentionally not stored here.
+services:
+  - type: web
+    name: cairn-console
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: ohio
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: CAIRN_DATABASE_URL
+        sync: false          # set in the Render dashboard (secret)
+      - key: PORT
+        value: "8080"
+      - key: CAIRN_EMBEDDER
+        value: deterministic
+      - key: CAIRN_EMBEDDING_DIM
+        value: "384"

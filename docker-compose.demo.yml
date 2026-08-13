@@ -1,0 +1,33 @@
+# The whole demo, self-contained, with zero credentials:
+#
+#     docker compose -f docker-compose.demo.yml up --build
+#
+# then open http://localhost:8080 and press "Run incident". A single-node CockroachDB backs the
+# console; nothing leaves your machine and no API keys are needed.
+name: cairn-demo
+
+services:
+  crdb:
+    image: cockroachdb/cockroach:v25.4.13
+    command: start-single-node --insecure
+    healthcheck:
+      test: ["CMD", "/cockroach/cockroach", "sql", "--insecure", "-e", "SELECT 1"]
+      interval: 5s
+      timeout: 4s
+      retries: 20
+      start_period: 15s
+    # No host ports needed: the console reaches CockroachDB over the internal network.
+
+  console:
+    build: .
+    environment:
+      CAIRN_DATABASE_URL: postgresql://root@crdb:26257/cairn?sslmode=disable
+      CAIRN_EMBEDDER: deterministic
+      CAIRN_EMBEDDING_DIM: "384"
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      crdb:
+        condition: service_healthy
+    restart: on-failure
