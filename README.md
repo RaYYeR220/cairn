@@ -108,9 +108,10 @@ Three of the four (two required):
 
 | Service | Role |
 |---|---|
-| **Bedrock** | Titan Text Embeddings V2 turns memory into the vectors the trust-tier index searches; the planner and gate second-opinion use the Converse API. Model-agnostic via [`bedrock.py`](src/cairn/bedrock.py); the reproducible demo falls back to a local ONNX embedder so it runs with zero credentials. |
-| **ECS Fargate** | The `checkout-api` workload the agent remediates — scaled and rolled back through idempotent effectors. The zero-credential demo simulates it deterministically for replay; the effector contract is the same against the real ECS API. |
-| **CloudWatch** | The untrusted telemetry source — logs and alarms the agent ingests as *evidence, never instructions*. |
+| **CloudWatch Logs** | **Live.** The untrusted telemetry source: the agent's observe step reads real log events as *evidence, never instructions*. [`lab/live_aws.py`](lab/live_aws.py) publishes an incident (including the poisoned line) to a real log group and the agent reads it back — [`src/cairn/aws/cloudwatch.py`](src/cairn/aws/cloudwatch.py). |
+| **S3** | **Live.** After an incident the agent writes the postmortem it will remember and the full run for audit to a real bucket, content-addressed by run — [`src/cairn/aws/s3.py`](src/cairn/aws/s3.py). |
+| **Bedrock** | Titan Text Embeddings V2 turns memory into the vectors the trust-tier index searches; the planner and gate second-opinion use the Converse API. Model-agnostic via [`bedrock.py`](src/cairn/bedrock.py). Text inference is gated on this fresh account (see *Honest limitations*), so the reproducible demo falls back to a local ONNX embedder and runs with zero credentials. |
+| **ECS Fargate** | The `checkout-api` workload the agent remediates — scaled and rolled back through idempotent effectors. The zero-credential demo simulates it deterministically for replay; the effector contract is idempotent and API-shaped, so the same steps drive a real ECS service unchanged. |
 
 ## Run it
 

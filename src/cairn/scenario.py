@@ -81,8 +81,13 @@ def run_incident(
     tenant_id: UUID,
     embedder: Embedder,
     approvals: set[str] | None = None,
+    signals: list[str] | None = None,
 ) -> ScenarioResult:
-    """Run the whole incident and return everything the console needs to render it."""
+    """Run the whole incident and return everything the console needs to render it.
+
+    `signals` defaults to the scripted burst; the live-AWS path passes the lines it read back from
+    a real CloudWatch log stream, so the same arc runs on genuine telemetry.
+    """
     store = MemoryStore(conn, tenant_id=tenant_id, embedder=embedder, gate=IntegrityGate())
     reader = MemoryReader(conn, tenant_id=tenant_id)
     seed_service(conn, tenant_id, service=SERVICE, desired_count=4)
@@ -96,7 +101,7 @@ def run_incident(
         planner=_planner_for(store, tenant_id),
         approvals=approvals if approvals is not None else {"ecs.rollback_deployment"},
     )
-    report = agent.handle(SERVICE, SIGNALS)
+    report = agent.handle(SERVICE, signals if signals is not None else SIGNALS)
 
     result = ScenarioResult(run_id=report.run_id, tenant_id=tenant_id)
     result.executed = [{"effector": o.step.effector, "params": o.step.params,
