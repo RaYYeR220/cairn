@@ -67,7 +67,7 @@ def other_worker(connect, tenant) -> Ledger:
 
 @pytest.fixture
 def embedder() -> DeterministicEmbedder:
-    return DeterministicEmbedder(dimensions=1024)
+    return DeterministicEmbedder()
 
 
 @pytest.fixture

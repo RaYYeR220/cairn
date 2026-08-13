@@ -6,10 +6,13 @@ it decides which partitions of the index a retrieval is allowed to walk at all.
 
 from __future__ import annotations
 
+import os
 from enum import IntEnum
 
-#: Titan Text Embeddings V2 default width; the `memory.embedding` column is declared to match.
-EMBEDDING_DIMENSIONS = 1024
+#: Width of the embedding vector, and of the `memory.embedding` column. Defaults to the local
+#: model's 384 dims (a zero-credential demo), overridable to match a hosted embedder - e.g.
+#: CAIRN_EMBEDDING_DIM=1024 for Titan Text Embeddings V2.
+EMBEDDING_DIMENSIONS = int(os.environ.get("CAIRN_EMBEDDING_DIM", "384"))
 
 
 class Tier(IntEnum):
