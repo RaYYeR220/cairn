@@ -7,7 +7,14 @@ the damage back.
 
 from uuid import uuid4
 
-from cairn.scenario import SIGNALS, run_incident, run_incident_then_poison_rollback
+import pytest
+
+from cairn.scenario import (
+    SIGNALS,
+    durability_demo,
+    run_incident,
+    run_incident_then_poison_rollback,
+)
 
 
 def test_the_incident_quarantines_the_injection_and_takes_the_right_action(connect, embedder):
@@ -39,3 +46,17 @@ def test_revoking_a_believed_fact_rolls_the_incident_back(connect, embedder):
     comp = result.rollback["compensating_actions"]
     assert len(comp) == 1
     assert comp[0]["reverts_idem_key"]
+
+
+@pytest.mark.slow
+def test_a_worker_crash_mid_run_still_finishes_exactly_once(connect, tenant):
+    result = durability_demo(connect(), tenant_id=tenant, lease_seconds=1)
+
+    assert result["exactly_once"]
+    assert result["crashed_at_step"] == 2
+    # Each of the four steps applied exactly once; step 2, applied by the worker that then crashed,
+    # was re-attempted by worker-b as a no-op, so the effect log still names worker-a.
+    by_step = {e["step_no"]: e["applied_by"] for e in result["effects"]}
+    assert by_step == {1: "worker-a", 2: "worker-a", 3: "worker-b", 4: "worker-b"}
+    # The run is fully resolved: every step has a result.
+    assert all(s["outcome"] == "succeeded" for s in result["timeline"])

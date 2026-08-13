@@ -8,6 +8,7 @@ step returns structured data, so the same run drives the console, a CLI narratio
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -16,9 +17,11 @@ import psycopg
 
 from .agent.incident import IncidentAgent
 from .agent.planner import Plan, PlannedStep, StubPlanner
+from .agent.worker import run_until_done
 from .effectors import demo_registry, seed_service
 from .embedding import Embedder
 from .gate import IntegrityGate
+from .ledger import Ledger
 from .memory import MemoryStore, Tier
 from .reader import MemoryReader
 from .rollback import compensating_actions
@@ -134,3 +137,63 @@ def run_incident_then_poison_rollback(
         "compensating_actions": compensating_actions(report),
     }
     return result
+
+
+def durability_demo(conn: psycopg.Connection, tenant_id: UUID, lease_seconds: int = 1) -> dict:
+    """Crash a worker in the worst window and show the run finish exactly once.
+
+    A four-step remediation is planned. Worker A executes step 1, then applies step 2's effect and
+    "crashes" before recording the result - the exact window that breaks a naive agent. Worker B
+    takes over once the lease lapses, finds step 2's effect already applied (a no-op at the
+    effector), and finishes. The effect log proves each step landed once, and that step 2 still
+    bears Worker A's name - Worker B's re-attempt changed nothing.
+
+    Works against any CockroachDB, so it runs on the hosted demo too.
+    """
+    ledger = Ledger(conn, tenant_id=tenant_id)
+    registry = demo_registry()
+    seed_service(conn, tenant_id, service=SERVICE, desired_count=2)
+    run = ledger.open_run(title="scale checkout-api through a worker crash")
+    for step_no, count in enumerate([3, 4, 5, 6], start=1):
+        ledger.record_intent(run, step_no=step_no, effector="ecs.update_service",
+                             params={"service": SERVICE, "desired_count": count})
+
+    eff = registry["ecs.update_service"]
+
+    # Worker A: step 1 in full.
+    c1 = ledger.claim_next(run, worker="worker-a", lease_seconds=lease_seconds)
+    obs1 = eff.apply(conn, tenant_id, c1.intent.idem_key, "worker-a", c1.intent.params)
+    ledger.record_result(c1, outcome="succeeded", observed_state=obs1)
+
+    # Worker A: step 2 effect applied, then it dies before recording the result.
+    c2 = ledger.claim_next(run, worker="worker-a", lease_seconds=lease_seconds)
+    eff.apply(conn, tenant_id, c2.intent.idem_key, "worker-a", c2.intent.params)
+    crashed_at = c2.intent.step_no  # no record_result — this is the crash.
+
+    time.sleep(lease_seconds + 0.6)  # the lease lapses
+
+    # Worker B takes over and drains the run.
+    run_until_done(conn, tenant_id=tenant_id, run_id=run, worker="worker-b",
+                   registry=registry, lease_seconds=30)
+
+    timeline = MemoryReader(conn, tenant_id=tenant_id).run_timeline(run)
+    effects = conn.execute(
+        """
+        SELECT i.step_no, e.applied_by, e.observed_state->>'desired_count' AS desired
+          FROM effect_log e JOIN step_intent i
+            ON i.tenant_id = e.tenant_id AND i.idem_key = e.idem_key
+         WHERE e.tenant_id = %s AND i.run_id = %s
+         ORDER BY i.step_no
+        """,
+        (tenant_id, run),
+    ).fetchall()
+    applied = [{"step_no": r[0], "applied_by": r[1], "desired_count": int(r[2])} for r in effects]
+
+    return {
+        "run_id": str(run),
+        "crashed_at_step": crashed_at,
+        "resumed_by": "worker-b",
+        "timeline": timeline,
+        "effects": applied,
+        "exactly_once": len(applied) == 4 and len({a["step_no"] for a in applied}) == 4,
+    }

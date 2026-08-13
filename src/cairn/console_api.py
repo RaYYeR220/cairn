@@ -19,7 +19,7 @@ from uuid import uuid4
 from .db import connect
 from .embedding import make_embedder
 from .eval.runner import score
-from .scenario import RUNBOOKS, SIGNALS, run_incident_then_poison_rollback
+from .scenario import RUNBOOKS, SIGNALS, durability_demo, run_incident_then_poison_rollback
 
 _STATIC = Path(__file__).resolve().parent.parent.parent / "console" / "static"
 
@@ -77,6 +77,14 @@ def create_app():
             "timeline": result.timeline,
             "rollback": result.rollback,
         })
+
+    @app.post("/api/durability")
+    def durability():
+        """Crash a worker mid-run and show the run finish exactly once."""
+        from uuid import uuid4
+
+        with connect(_database_url()) as conn:
+            return durability_demo(conn, tenant_id=uuid4())
 
     @app.get("/api/eval")
     def evaluation():

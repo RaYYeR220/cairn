@@ -168,6 +168,21 @@
     border-radius:4px; padding:16px 18px}
   .comp h3{font-family:"Fraunces",serif; font-weight:600; font-size:15px; margin:0 0 4px; color:var(--teal)}
 
+  /* ---------- durability ---------- */
+  .dur-head{display:flex; align-items:center; gap:16px; margin-bottom:18px}
+  .dur-head .verdict{font-family:"Fraunces",serif; font-weight:900; font-size:26px; color:var(--moss)}
+  .dur-head .verdict.bad{color:var(--clay)}
+  .workers{display:flex; gap:10px; align-items:stretch; flex-wrap:wrap}
+  .wstep{flex:1; min-width:120px; background:var(--slate); border:1px solid var(--line);
+    border-top:3px solid var(--line); border-radius:4px; padding:14px; animation:drop .5s var(--ease) both}
+  .wstep.wa{border-top-color:var(--amber)} .wstep.wb{border-top-color:var(--teal)}
+  .wstep .sn{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--stone-faint)}
+  .wstep .val{font-family:"Fraunces",serif; font-size:24px; margin:6px 0 8px}
+  .wstep .by{font-size:11px} .wstep.wa .by{color:var(--amber)} .wstep.wb .by{color:var(--teal)}
+  .wstep .crash{color:var(--clay); font-size:11px; margin-top:6px}
+  .dur-note{margin-top:16px; font-size:12px; color:var(--stone-faint)}
+  .dur-note b{color:var(--stone)}
+
   /* ---------- eval scorecard ---------- */
   .score{margin-left:46px; display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin-bottom:26px}
   .metric{background:var(--basalt-2); border:1px solid var(--line); border-radius:4px; padding:18px}
@@ -261,6 +276,19 @@
       Because memory is a transactional ledger with provenance, "what did we do because we believed
       it?" is a <b>query</b>: the decision is tainted and a compensating action is proposed.</p>
     <div id="rollback" class="placeholder">Run the incident to see the rollback.</div>
+  </section>
+
+  <!-- 3½. Durability -->
+  <section class="step hidewhenidle" id="s-durability">
+    <div class="kicker"><span class="idx" style="border-color:var(--clay-deep);color:var(--clay)">✕</span>
+      <h2>The worker is allowed to die</h2></div>
+    <p class="lede">The agent runs on ephemeral compute — that is a feature, not a risk. Here a
+      worker applies a step's effect and is killed <b>before it can record the result</b>: the exact
+      window that doubles a naive agent's actions. A second worker takes over the intact ledger,
+      finds the effect already applied, and finishes. <b>Each effect lands exactly once</b> —
+      verified against real external state, not a counter.</p>
+    <div style="margin-left:46px"><button class="run" id="crashBtn" style="font-size:12px;padding:11px 18px">✕ Crash a worker mid-run</button></div>
+    <div id="durability" class="placeholder" style="margin-top:20px">Kill a worker to watch the run survive it.</div>
   </section>
 
   <!-- 4. Eval -->
@@ -440,7 +468,39 @@ async function run(){
   }
 }
 
+async function crash(){
+  const btn=$('#crashBtn'); btn.disabled=true; btn.textContent='killing worker…';
+  document.body.classList.remove('idle');
+  status('worker crashed after applying an effect — resuming…','#d0603f');
+  try{
+    const d=await j('/api/durability',{method:'POST'});
+    const D=$('#durability'); D.className=''; D.innerHTML='';
+    const head=el('div','dur-head');
+    head.innerHTML=`<span class="verdict${d.exactly_once?'':' bad'}">${d.exactly_once?'exactly once ✓':'duplicated ✗'}</span>
+      <span class="muted">worker-a died after applying step ${d.crashed_at_step}; ${d.resumed_by} finished the run.</span>`;
+    D.appendChild(head);
+    const row=el('div','workers');
+    d.effects.forEach((e,i)=>{
+      const wa=e.applied_by==='worker-a';
+      const s=el('div','wstep '+(wa?'wa':'wb')); s.style.animationDelay=(i*120)+'ms';
+      s.innerHTML=`<div class="sn">step ${e.step_no}</div>
+        <div class="val">→ ${e.desired_count}</div>
+        <div class="by">${esc(e.applied_by)}</div>
+        ${e.step_no===d.crashed_at_step?'<div class="crash">✕ applied, then crashed<br/>(re-applied as a no-op)</div>':''}`;
+      row.appendChild(s);
+    });
+    D.appendChild(row);
+    D.appendChild(el('div','dur-note',
+      `The effect log records each step once. Step ${d.crashed_at_step} still bears <b>worker-a</b>'s
+       name — <b>${d.resumed_by}</b> re-ran it after the crash and the idempotency key made it a
+       no-op. A single-node store would have lost the ledger when the worker's region went down.`));
+    status('run survived the crash · every effect applied exactly once','#8fae55');
+  }catch(e){ status('durability run failed: '+e.message,'#d0603f'); }
+  finally{ btn.disabled=false; btn.textContent='✕ Crash a worker mid-run'; }
+}
+
 $('#runBtn').addEventListener('click',run);
+$('#crashBtn').addEventListener('click',crash);
 loadSetup(); loadEval();
 </script>
 </body>
