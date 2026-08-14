@@ -114,8 +114,8 @@ Three of the four (two required):
 |---|---|
 | **CloudWatch Logs** | **Live.** The untrusted telemetry source: the agent's observe step reads real log events as *evidence, never instructions*. [`lab/live_aws.py`](lab/live_aws.py) publishes an incident (including the poisoned line) to a real log group and the agent reads it back — [`src/cairn/aws/cloudwatch.py`](src/cairn/aws/cloudwatch.py). |
 | **S3** | **Live.** After an incident the agent writes the postmortem it will remember and the full run for audit to a real bucket, content-addressed by run — [`src/cairn/aws/s3.py`](src/cairn/aws/s3.py). |
+| **ECS Fargate** | **Live.** The `checkout-api` workload the agent remediates. [`lab/live_ecs.py`](lab/live_ecs.py) creates a real ECS service, and the agent scales it and rolls back its task definition through the real ECS API — each action idempotent under its ledger key, every change verified by reading the service's live state back from AWS. [`src/cairn/aws/ecs.py`](src/cairn/aws/ecs.py). The zero-credential console demo simulates the same effector contract for reproducible replay. |
 | **Bedrock** | Titan Text Embeddings V2 turns memory into the vectors the trust-tier index searches; the planner and gate second-opinion use the Converse API. Model-agnostic via [`bedrock.py`](src/cairn/bedrock.py). Text inference is gated on this fresh account (see *Honest limitations*), so the reproducible demo falls back to a local ONNX embedder and runs with zero credentials. |
-| **ECS Fargate** | The `checkout-api` workload the agent remediates — scaled and rolled back through idempotent effectors. The zero-credential demo simulates it deterministically for replay; the effector contract is idempotent and API-shaped, so the same steps drive a real ECS service unchanged. |
 
 ## Run it
 
@@ -167,8 +167,10 @@ The numbers, reproducibly:
   allowed", pending a support case), so the reproducible demo uses a local embedder and a
   deterministic planner. Every model call sits behind an interface and swaps to Bedrock via one env
   var once enabled.
-- The zero-credential demo simulates the ECS workload for deterministic replay. The effector
-  contract is idempotent and API-shaped, so the same steps drive a real ECS service unchanged.
+- The agent drives a **real** ECS Fargate service (`lab/live_ecs.py`); the zero-credential *console*
+  demo simulates the same effector contract so it can replay deterministically without an AWS
+  account. The live service runs at desired count 0 (no tasks, no cost) — the effector genuinely
+  changes that count and the task-definition revision on real AWS, verified by reading it back.
 - The gate's deterministic detectors do not catch pure semantic paraphrase on their own — that is
   the model second-opinion's job, and the default is fail-closed.
 
