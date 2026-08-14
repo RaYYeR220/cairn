@@ -139,6 +139,42 @@ def run_incident_then_poison_rollback(
     return result
 
 
+def revoke_race_trial(
+    conn: psycopg.Connection, tenant_id: UUID, embedder: Embedder, connect
+) -> bool:
+    """One race of a revocation against a decision that cites the same fact.
+
+    Returns True if the invariant held: after both ran, no live (untainted) decision is left citing
+    a quarantined fact. Under serializable isolation this must hold on every ordering.
+    """
+    import threading
+
+    store = MemoryStore(conn, tenant_id=tenant_id, embedder=embedder, gate=IntegrityGate())
+    fact = store.remember("checkout-api error rate is within normal range.", kind="finding",
+                          source_uri="system://metrics", source_class="system",
+                          tier=Tier.CORROBORATED)
+
+    revoker = MemoryStore.like(store, conn=connect())
+    barrier = threading.Barrier(2)
+
+    def revoke():
+        barrier.wait()
+        revoker.revoke(fact.mem_id, reason="feed spoofed")
+
+    t = threading.Thread(target=revoke)
+    t.start()
+    barrier.wait()
+    decision = store.decide_citing([fact.mem_id], summary="act on normal error rate",
+                                   required_tiers={Tier.CORROBORATED, Tier.OPERATOR})
+    t.join()
+
+    if store.tier_of(fact.mem_id) != Tier.QUARANTINED:
+        return False  # the revocation must always win the tier
+    if decision.committed:
+        return store.is_tainted(decision.decision_id)  # committed ⇒ must be tainted
+    return decision.refused_reason == "evidence_revoked"  # refused ⇒ for the right reason
+
+
 def durability_demo(conn: psycopg.Connection, tenant_id: UUID, lease_seconds: int = 1) -> dict:
     """Crash a worker in the worst window and show the run finish exactly once.
 
