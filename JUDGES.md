@@ -29,8 +29,9 @@ The hosted version is the same page, one click away: **https://cairn-console.onr
 docker compose -f lab/docker-compose.yml up -d            # 3 nodes, one per simulated region
 uv venv && uv pip install -e ".[dev,mcp,embed]"
 
-uv run pytest -q                                          # 38 tests, live cluster
-uv run python -m cairn.eval.runner                        # gate scorecard: 82% recall, 0% FP, misses listed
+uv run pytest -q                                          # 39 tests, live cluster
+uv run python lab/proofs.py                               # 3 graded tracks → PROOFS.md (gate · durability · invariant)
+uv run python lab/compare_pgvector.py                     # CockroachDB vs pgvector → COMPARISON.md
 uv run python lab/resilience.py                           # kill a region mid-run; watch it finish exactly once
 ```
 

@@ -150,6 +150,17 @@ uv run python lab/resilience.py                         # kill a region mid-run;
 - **Region-failure demo**: a node is killed mid-remediation; the worker fails over to a surviving
   region, reads its intact ledger, and finishes — exactly once.
 
+The numbers, reproducibly:
+
+- **[PROOFS.md](PROOFS.md)** — `python lab/proofs.py` runs three graded tracks against a real
+  cluster: the gate (27/33, 0 false positives), durability across 15 mid-run crashes (15/15
+  exactly-once), and the consistency invariant across 30 revoke-vs-decide races (30/30 held).
+- **[COMPARISON.md](COMPARISON.md)** — `python lab/compare_pgvector.py` runs the *same* trust-tier
+  isolation on CockroachDB and on Postgres + pgvector. pgvector gives you fast search **or** tier
+  isolation, not both: unfiltered, the planted poison takes all 10 result slots; add the tier filter
+  and pgvector abandons the vector index for a full sequential scan. CockroachDB's prefix-column
+  vector index gives both at once — the mechanism this project is built on.
+
 ## Honest limitations
 
 - Bedrock text-generation inference is gated on the fresh AWS account used here ("Operation not
