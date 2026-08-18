@@ -14,7 +14,8 @@ Built for the **CockroachDB × AWS "Build with Agentic Memory"** hackathon.
 
 **▶ Live demo: [cairn-console.onrender.com](https://cairn-console.onrender.com)** — press *Run
 incident* and watch the enforcement. *(Free tier; the first request after idle takes ~30s to wake.)*
-&nbsp;·&nbsp; **[Reviewer's 5-minute path →](JUDGES.md)**
+&nbsp;·&nbsp; **[▶ 3-min video](https://youtu.be/vQRc2TTGRac)** &nbsp;·&nbsp;
+**[Reviewer's 5-minute path →](JUDGES.md)**
 
 ---
 
